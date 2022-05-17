@@ -13,7 +13,7 @@ SCHEMAS_DIR = Path(__file__).parent / Path("./schemas")
 #       - Copy-paste as many times as needed to create multiple stream types.
 
 
-class UsersStream(QuickbaseJsonStream):
+class LGensStream(QuickbaseJsonStream):
     """Define custom stream."""
     name = "users"
     path = "/users"
@@ -46,17 +46,4 @@ class UsersStream(QuickbaseJsonStream):
             description="State name in ISO 3166-2 format"
         ),
         th.Property("zip", th.StringType),
-    ).to_dict()
-
-
-class GroupsStream(QuickbaseJsonStream):
-    """Define custom stream."""
-    name = "groups"
-    path = "/groups"
-    primary_keys = ["id"]
-    replication_key = "modified"
-    schema = th.PropertiesList(
-        th.Property("name", th.StringType),
-        th.Property("id", th.StringType),
-        th.Property("modified", th.DateTimeType),
     ).to_dict()

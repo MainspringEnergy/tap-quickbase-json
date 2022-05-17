@@ -1,4 +1,5 @@
-"""REST client handling, including quickbase-jsonStream base class."""
+"""REST client handling, including QuickbaseJsonStream base class."""
+import re
 
 import requests
 from pathlib import Path
@@ -14,18 +15,77 @@ from singer_sdk.authenticators import APIKeyAuthenticator
 SCHEMAS_DIR = Path(__file__).parent / Path("./schemas")
 
 
+def normalize_name(name: str) -> str:
+    name = str(name).strip()
+    name = re.sub(r'\s+', '_', name).lower()
+    name = re.sub(r'[^a-z0-9_]', '_', name)
+    return name
+
+
+class QuickbaseConn():
+    def __init__(self, config: Dict):
+        self.config = config
+
+    @property
+    def http_headers(self) -> dict:
+        """Return the http headers needed."""
+        headers = {
+            "QB-Realm-Hostname": self.config.get("qb_hostname"),
+            "Authorization": f"QB-USER-TOKEN {self.config.get('qb_user_token')}",
+        }
+
+        if "user_agent" in self.config:
+            headers["User-Agent"] = self.config.get("user_agent")
+        return headers
+
+    @property
+    def url_params(self) -> dict:
+        """Return a dictionary of values to be used in URL parameterization."""
+        params = {
+            'appId': self.config['qb_appid']
+        }
+        return params
+
+    def _request_tables(self) -> dict:
+        print(f'params: {self.url_params}')
+        print(f'headers: {self.http_headers}')
+        request = requests.get(
+            'https://api.quickbase.com/v1/tables',
+            params=self.url_params,
+            headers=self.http_headers,
+        )
+        request.raise_for_status()
+        return request.json()
+
+    def get_tables(self) -> dict:
+        tables = self._request_tables()
+
+        return [
+            {
+                'name': normalize_name(table['name']),
+                'label': table['name'],
+                'id': table['id'],
+            }
+            for table in tables
+            # TODO: remove debug
+            if table['name'] == 'WO Tags'
+        ]
+
+
+
+
+
+
+
 class QuickbaseJsonStream(RESTStream):
     """quickbase-json stream class."""
 
-    # TODO: Set the API's base URL here:
-    url_base = "https://api.mysample.com"
+    @property
+    def url_base(self) -> str:
+        """Return the API URL root, configurable via tap settings."""
+        return self.config["qb_url"]
 
-    # OR use a dynamic url_base:
-    # @property
-    # def url_base(self) -> str:
-    #     """Return the API URL root, configurable via tap settings."""
-    #     return self.config["api_url"]
-
+    # TODO: WTF?
     records_jsonpath = "$[*]"  # Or override `parse_response`.
     next_page_token_jsonpath = "$.next_page"  # Or override `get_next_page_token`.
 
@@ -34,19 +94,20 @@ class QuickbaseJsonStream(RESTStream):
         """Return a new authenticator object."""
         return APIKeyAuthenticator.create_for_stream(
             self,
-            key="x-api-key",
-            value=self.config.get("api_key"),
+            key="Authorization",
+            value=f"QB-USER-TOKEN {self.config.get('qb_user_token')}",
             location="header"
         )
 
     @property
     def http_headers(self) -> dict:
         """Return the http headers needed."""
-        headers = {}
+        headers = {
+            "QB-Realm-Hostname": self.config.get("qb_url")
+        }
+
         if "user_agent" in self.config:
             headers["User-Agent"] = self.config.get("user_agent")
-        # If not using an authenticator, you may also provide inline auth headers:
-        # headers["Private-Token"] = self.config.get("auth_token")
         return headers
 
     def get_next_page_token(
@@ -71,12 +132,9 @@ class QuickbaseJsonStream(RESTStream):
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
         """Return a dictionary of values to be used in URL parameterization."""
-        params: dict = {}
-        if next_page_token:
-            params["page"] = next_page_token
-        if self.replication_key:
-            params["sort"] = "asc"
-            params["order_by"] = self.replication_key
+        params = {
+            'appId': self.config['qb_appid']
+        }
         return params
 
     def prepare_request_payload(

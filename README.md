@@ -25,6 +25,17 @@ tap is available by running:
 tap-quickbase-json --about
 ```
 
+TODO: Is this right
+Create a configuration file
+```
+{
+ "qb_url": "https://yoursubdomain.quickbase.com/db/",
+ "qb_appid": "your_appid",
+ "qb_user_token": "your_user_token",
+ "start_date": "1970-01-01T00:00:01Z"
+}
+```
+
 ### Source Authentication and Authorization
 
 - [ ] `Developer TODO:` If your tap requires special access on the source system, or any special authentication requirements, provide those here.
