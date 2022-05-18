@@ -9,16 +9,21 @@ from memoization import cached
 
 from singer_sdk.helpers.jsonpath import extract_jsonpath
 from singer_sdk.streams import Stream
-from singer_sdk.authenticators import APIKeyAuthenticator
-
+from singer_sdk import typing as th  # JSON schema typing helpers
 
 SCHEMAS_DIR = Path(__file__).parent / Path("./schemas")
 
 
 def normalize_name(name: str) -> str:
+    name = name.replace('#', ' nbr ')
+    name = name.replace('&', ' and ')
+    name = name.replace('@', ' at ')
+    name = name.replace('*', ' star ')
+    name = name.replace('$', ' dollar ')
+    name = name.replace('?', ' q ')
     name = str(name).strip()
-    name = re.sub(r'\s+', '_', name).lower()
-    name = re.sub(r'[^a-z0-9_]', '_', name)
+    name = re.sub(r'\s+', ' ', name).lower()
+    name = re.sub(r'[^a-z0-9]+', '_', name)
     return name
 
 
@@ -38,20 +43,14 @@ class QuickbaseApi():
             headers["User-Agent"] = self.config.get("user_agent")
         return headers
 
-    @property
-    def url_params(self) -> dict:
-        """Return a dictionary of values to be used in URL parameterization."""
+    def _request_tables(self) -> dict:
         params = {
             'appId': self.config['qb_appid']
         }
-        return params
 
-    def _request_tables(self) -> dict:
-        print(f'params: {self.url_params}')
-        print(f'headers: {self.http_headers}')
         request = requests.get(
             'https://api.quickbase.com/v1/tables',
-            params=self.url_params,
+            params=params,
             headers=self.http_headers,
         )
         request.raise_for_status()
@@ -70,6 +69,59 @@ class QuickbaseApi():
             # TODO: remove debug
             if table['name'] in ['WO Tags', 'Cost Centers']
         ]
+
+    def _request_fields(self, table_id: str) -> dict:
+        params = {
+            'tableId': table_id,
+            'includeFieldPerms': False
+        }
+
+        request = requests.get(
+            'https://api.quickbase.com/v1/fields',
+            params=params,
+            headers=self.http_headers
+        )
+        request.raise_for_status()
+        return request.json()
+
+    @cached
+    def get_fields(self, table_id: str) -> dict:
+        fields = self._request_fields(table_id)
+        return {
+            field['id']: {
+                'name': normalize_name(field['label']),
+                'fieldType': field['fieldType']
+            }
+            for field in fields
+        }
+
+    @staticmethod
+    def type_lookup(qb_type: str) -> th.JSONTypeHelper:
+        return {
+            'checkbox': th.BooleanType,
+            'currency': th.NumberType,
+            'date': th.DateType,
+            'duration': th.DurationType,
+            'numeric': th.NumberType,
+            'percent': th.NumberType,
+            'rating': th.NumberType,
+            'timestamp': th.DateTimeType,
+            'datetime': th.DateTimeType,
+            'timeofday': th.TimeType,
+        }.get(qb_type, th.StringType)
+
+    @cached
+    def get_schema(self, table_id) -> dict:
+        schema = th.PropertiesList()
+        for _id, field in self.get_fields(table_id).items():
+            schema.append(
+                th.Property(
+                    field['name'],
+                    self.type_lookup(field['fieldType'])
+                )
+            )
+        return schema.to_dict()
+
 
 
 class QuickbaseJsonStream(Stream):
