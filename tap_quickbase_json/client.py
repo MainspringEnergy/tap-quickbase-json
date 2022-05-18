@@ -14,6 +14,18 @@ from singer_sdk import typing as th  # JSON schema typing helpers
 SCHEMAS_DIR = Path(__file__).parent / Path("./schemas")
 
 
+class TooManyKeyFieldsError(BaseException):
+    pass
+
+
+class NoKeyFieldError(BaseException):
+    pass
+
+
+class DateModifiedNotFoundError(BaseException):
+    pass
+
+
 def normalize_name(name: str) -> str:
     name = name.replace('#', ' nbr ')
     name = name.replace('&', ' and ')
@@ -43,7 +55,7 @@ class QuickbaseApi():
             headers["User-Agent"] = self.config.get("user_agent")
         return headers
 
-    def _request_tables(self) -> dict:
+    def request_tables(self) -> dict:
         params = {
             'appId': self.config['qb_appid']
         }
@@ -57,7 +69,7 @@ class QuickbaseApi():
         return request.json()
 
     def get_tables(self) -> dict:
-        tables = self._request_tables()
+        tables = self.request_tables()
 
         return [
             {
@@ -67,10 +79,14 @@ class QuickbaseApi():
             }
             for table in tables
             # TODO: remove debug
-            if table['name'] in ['WO Tags', 'Cost Centers']
+            if table['name'] in [
+                    'WO Tags',
+#                    'Cost Centers',
+            ]
         ]
 
-    def _request_fields(self, table_id: str) -> dict:
+    @cached
+    def request_fields(self, table_id: str) -> dict:
         params = {
             'tableId': table_id,
             'includeFieldPerms': False
@@ -84,16 +100,48 @@ class QuickbaseApi():
         request.raise_for_status()
         return request.json()
 
-    @cached
-    def get_fields(self, table_id: str) -> dict:
-        fields = self._request_fields(table_id)
-        return {
-            field['id']: {
+
+
+class QuickbaseJsonStream(Stream):
+    """quickbase-json stream class."""
+
+    def __init__(self, table: dict = None, **kwargs) -> None:
+        self.table = table
+        super().__init__(**kwargs)
+
+    @property
+    def api(self) -> QuickbaseApi:
+        if hasattr(self, '_api'):
+            return self._api
+        self._api = QuickbaseApi(self.config)
+        return self._api
+
+    @api.setter
+    def api(self, value) -> None:
+        self._api = value
+
+    @property
+    def fields(self) -> dict:
+        if hasattr(self, '_fields'):
+            return self._fields
+
+        api_fields = self.api.request_fields(self.table['id'])
+        self._fields = [
+            {
+                'id': field['id'],
                 'name': normalize_name(field['label']),
-                'fieldType': field['fieldType']
+                'fieldType': field['fieldType'],
             }
-            for field in fields
+            for field in api_fields
+        ]
+        return self._fields
+
+    def field_lookup(self) -> dict:
+        return {
+            field['id']: field['name']
+            for field in self.fields
         }
+
 
     @staticmethod
     def type_lookup(qb_type: str) -> th.JSONTypeHelper:
@@ -108,47 +156,76 @@ class QuickbaseApi():
             'timestamp': th.DateTimeType,
             'datetime': th.DateTimeType,
             'timeofday': th.TimeType,
+            'recordid': th.NumberType,
         }.get(qb_type, th.StringType)
 
-    @cached
-    def get_schema(self, table_id) -> dict:
-        schema = th.PropertiesList()
-        for _id, field in self.get_fields(table_id).items():
-            schema.append(
+    @property
+    def schema(self) -> dict:
+        if hasattr(self, '_schema'):
+            return self._schema
+
+        schema_builder = th.PropertiesList()
+        for field in self.fields:
+            schema_builder.append(
                 th.Property(
                     field['name'],
                     self.type_lookup(field['fieldType'])
                 )
             )
-        return schema.to_dict()
+        self._schema = schema_builder.to_dict()
+        return self._schema
 
-
-
-class QuickbaseJsonStream(Stream):
-    """quickbase-json stream class."""
-
-    @property
-    def api(self) -> QuickbaseApi:
-        if hasattr(self, '_api'):
-            return self._api
-        self._api = QuickbaseApi(self.config)
-        return self._api
-
-    @api.setter
-    def api(self, value) -> None:
-        self._api = value
+    @schema.setter
+    def schema(self, value) -> None:
+        self._schema = value
 
     @property
-    def table(self) -> dict:
-        if hasattr(self, '_table'):
-            return self._table
+    def primary_keys(self) -> List:
+        # parent Stream class initializes this one to None
+        if hasattr(self, '_primary_keys') and self._primary_keys is not None:
+            return self._primary_keys
 
-        self._table = {}
-        return self._table
+        id_fields = [
+            field['name']
+            for field in self.fields
+            if field['fieldType'] == 'recordid'
+        ]
+        if len(id_fields) > 1:
+            raise TooManyKeyFieldsError(
+                f'In table {self.table["id"]}, found multiple key fields: {id_fields}'
+            )
+        if len(id_fields) < 1:
+            raise NoKeyFieldError(
+                f'No key fields defined found for table {self.table["id"]}'
+            )
+        self._primary_keys = id_fields
+        return self._primary_keys
 
-    @table.setter
-    def table(self, value) -> None:
-        self._table = value
+    @primary_keys.setter
+    def primary_keys(self, value: List) -> None:
+        self._primary_keys = value
+
+
+    # TODO: I don't know if I need this
+    # @property
+    # def replication_key(self) -> str:
+    #     # parent Stream class initializes this one to None
+    #     if hasattr(self, '_replication_key') and self._replication_key is not None:
+    #         return self._replication_key
+
+    #     if 'date_modified' not in [field['name'] for field in self.fields]:
+    #         raise DateModifiedNotFoundError(
+    #             f'No `date_modified` field found for table {self.table["id"]}'
+    #         )
+
+    #     self._replication_key = 'date_modified'
+    #     return self._replication_key
+
+    # @replication_key.setter
+    # def replication_key(self, value) -> None:
+    #     self._replication_key = value
+
+
 
     def get_records(self, partition: Optional[dict] = None) -> Iterable[dict]:
         """Return a generator of row-type dictionary objects."""

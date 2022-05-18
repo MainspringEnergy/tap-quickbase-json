@@ -55,13 +55,11 @@ class TapQuickbaseJson(Tap):
 
         streams = []
         for table in tables:
-            schema = api.get_schema(table['id'])
             stream = QuickbaseJsonStream(
                 tap=self,
                 name=table['name'],
-                schema=schema
+                table=table,
             )
-            stream.table = table
             streams.append(stream)
 
         return streams
