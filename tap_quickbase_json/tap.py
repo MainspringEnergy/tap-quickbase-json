@@ -9,7 +9,7 @@ from tap_quickbase_json.streams import (
     QuickbaseJsonStream,
     LGensStream,
 )
-from tap_quickbase_json.client import QuickbaseConn
+from tap_quickbase_json.client import QuickbaseApi
 
 # TODO: Compile a list of custom stream types here
 #       OR rewrite discover_streams() below with your custom logic.
@@ -50,17 +50,20 @@ class TapQuickbaseJson(Tap):
 
     def discover_streams(self) -> List[Stream]:
         """Return a list of discovered streams."""
-        conn = QuickbaseConn(config=self.config)
-        tables = conn.get_tables()
-        schema = {
-            'type': 'SCHEMA',
-            'stream': '',
-            'schema': '',
-            'key_properties': '',
-        }
-        schema = th.PropertiesList()
-        schema.append(th.Property('blerg', th.StringType))
+        api = QuickbaseApi(config=self.config)
+        tables = api.get_tables()
 
-        return [QuickbaseJsonStream(tap=self, name=table['name'], schema=schema.to_dict()) for table in tables]
+        streams = []
+        for table in tables:
+            schema = th.PropertiesList()
+            schema.append(th.Property('blerg', th.StringType))
 
-#        return [stream_class(tap=self) for stream_class in STREAM_TYPES]
+            stream = QuickbaseJsonStream(
+                tap=self,
+                name=table['name'],
+                schema=schema.to_dict()
+            )
+            stream.table = table
+            streams.append(stream)
+
+        return streams
