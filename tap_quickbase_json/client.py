@@ -1,6 +1,6 @@
 """REST client handling, including QuickbaseJsonStream base class."""
 import re
-
+import logging
 import requests
 from pathlib import Path
 from typing import Any, Dict, Optional, Union, List, Iterable
@@ -48,8 +48,9 @@ def raise_for_status_w_message(request: requests.Request) -> None:
 
 
 class QuickbaseApi():
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, logger: [None, logging.Logger] = None):
         self.config = config
+        self.logger = logger or logging.Logger
 
     @property
     def http_headers(self) -> dict:
@@ -89,7 +90,9 @@ class QuickbaseApi():
             # TODO: remove debug
             if table['name'] in [
                     'WO Tags',
-#                    'Cost Centers',
+                    'Cost Centers',
+                    'Approvals',
+                    'Assemblies',
             ]
         ]
 
@@ -113,9 +116,7 @@ class QuickbaseApi():
         table_id: str,
         field_ids: list,
         date_modified_id: int,
-#        last_date_modified: str = '1970-01-01',
-# TODO: remove debug
-        last_date_modified: str = '2022-05-01',
+        last_date_modified: str = '1970-01-01',
         skip: int = 0,
     ) -> requests.Request:
 
@@ -135,12 +136,14 @@ class QuickbaseApi():
             #   OAF - On or after
             'where': f"{{'{date_modified_id}'.OAF.'{last_date_modified}'}}",
             # Hard-coding the sortBy field to be based on the last modified date
+            #  This seems like a standard Quickbase field so I don't think it needs to be configurable
             'sortBy': [{
                 'fieldId': date_modified_id,
                 'order': 'ASC',
             }],
-
         }
+
+        self.logger.info('Sending record request to Quickbase: %s', body)
 
         request = requests.post(
             'https://api.quickbase.com/v1/records/query',
@@ -156,12 +159,13 @@ class QuickbaseJsonStream(Stream):
     def __init__(self, table: dict = None, **kwargs) -> None:
         self.table = table
         super().__init__(**kwargs)
+        self.logger = self._tap.logger
 
     @property
     def api(self) -> QuickbaseApi:
         if hasattr(self, '_api'):
             return self._api
-        self._api = QuickbaseApi(self.config)
+        self._api = QuickbaseApi(self.config, logger=self.logger)
         return self._api
 
     @api.setter
@@ -182,7 +186,7 @@ class QuickbaseJsonStream(Stream):
             }
             for field in api_fields
             # TODO: remove debuging
-            if field['id'] <= 5
+#            if field['id'] <= 5
         ]
         return self._fields
 
@@ -198,14 +202,14 @@ class QuickbaseJsonStream(Stream):
             'checkbox': th.BooleanType,
             'currency': th.NumberType,
             'date': th.DateType,
-            'duration': th.DurationType,
+            'duration': th.IntegerType,
             'numeric': th.NumberType,
             'percent': th.NumberType,
             'rating': th.NumberType,
             'timestamp': th.DateTimeType,
             'datetime': th.DateTimeType,
             'timeofday': th.TimeType,
-            'recordid': th.NumberType,
+            'recordid': th.IntegerType,
             'multitext': th.ArrayType(th.StringType),
             'user': th.ObjectType(),
             'multiuser': th.ArrayType(th.ObjectType()),
@@ -276,7 +280,7 @@ class QuickbaseJsonStream(Stream):
     def replication_key(self, value) -> None:
         self._replication_key = value
 
-    def request_records(self) -> Iterable[dict]:
+    def request_records(self, context: Optional[dict]) -> Iterable[dict]:
         skip = 0
         total_records = 0
         finished = False
@@ -286,18 +290,21 @@ class QuickbaseJsonStream(Stream):
             self.fields
         ))[0]['id']
 
+        self.logger.info('Fetching data for table %s (%s)', self.table['id'], self.table['name'])
         while not finished:
             request = self.api.request_records(
                 table_id=self.table['id'],
                 field_ids=sorted([field['id'] for field in self.fields]),
                 date_modified_id=date_modified_id,
+                last_date_modified=self.get_starting_replication_key_value(context),
                 skip=skip,
             )
 
-            print(request.json())
             metadata = request.json()['metadata']
             total_records = metadata['totalRecords']
             skip = skip + metadata['numRecords']
+            self.logger.info('Retrieved %s/%s records', skip, total_records)
+
 
             finished = skip >= total_records
             yield from self.process_record_data(request.json()['data'])
@@ -309,15 +316,15 @@ class QuickbaseJsonStream(Stream):
                 field_lookup[int(field_id)]: value['value']
                 for field_id, value in record.items()
                 # TODO: remove debug
-                if int(field_id) <= 5
+#                if int(field_id) <= 5
             }
             yield processed
 
-    def get_records(self, partition: Optional[dict] = None) -> Iterable[dict]:
+    def get_records(self, context: Optional[dict]) -> Iterable[dict]:
         """Return a generator of row-type dictionary objects.
 
         Yields:
             One item per (possibly processed) record in the API.
         """
-        for record in self.request_records():
+        for record in self.request_records(context):
             yield record
