@@ -65,7 +65,10 @@ class QuickbaseApi():
             params=params,
             headers=self.http_headers,
         )
-        request.raise_for_status()
+        try:
+            request.raise_for_status()
+        except requests.exceptions.HTTPError as err:
+            raise requests.exceptions.HTTPError(request.text) from err
         return request
 
     def get_tables(self) -> dict:
@@ -97,27 +100,54 @@ class QuickbaseApi():
             params=params,
             headers=self.http_headers
         )
-        request.raise_for_status()
+        try:
+            request.raise_for_status()
+        except requests.exceptions.HTTPError as err:
+            raise requests.exceptions.HTTPError(request.text) from err
         return request
 
-    def request_records(self, table_id: str, field_ids: list, skip: int = 0):
+    def request_records(
+        self,
+        table_id: str,
+        field_ids: list,
+        date_modified_id: int,
+#        last_date_modified: str = '1970-01-01',
+# TODO: remove debug
+        last_date_modified: str = '2022-05-01',
+        skip: int = 0,
+    ) -> requests.Request:
+
         options = {
             'skip': skip
         }
+
+        #TODO: Doc - What the flark!  Quickbase does not allow you to query on datetimes,
+        # only dates.  So we're not going to be able to incrementally stream data at
+        # a granularity more than daily.
 
         body = {
             'from': table_id,
             'select': field_ids,
             'options': options,
-            # 'where': ...,
-            # 'sortBy': ...,
+            'where': f"{{'{date_modified_id}'.OAF.'{last_date_modified}'}}",
+            # Hard-coding the sortBy field to be based on the last modified date
+            'sortBy': [{
+                'fieldId': date_modified_id,
+                'order': 'ASC',
+            }],
 
         }
+        # print(body)
+        # raise(BaseException('fin'))
         request = requests.post(
             'https://api.quickbase.com/v1/records/query',
             headers=self.http_headers,
             json=body
         )
+        try:
+            request.raise_for_status()
+        except requests.exceptions.HTTPError as err:
+            raise requests.exceptions.HTTPError(request.text) from err
         return request
 
 class QuickbaseJsonStream(Stream):
@@ -151,6 +181,8 @@ class QuickbaseJsonStream(Stream):
                 'fieldType': field['fieldType'],
             }
             for field in api_fields
+            # TODO: remove debuging
+            if field['id'] <= 5
         ]
         return self._fields
 
@@ -159,7 +191,6 @@ class QuickbaseJsonStream(Stream):
             field['id']: field['name']
             for field in self.fields
         }
-
 
     @staticmethod
     def type_lookup(qb_type: str) -> th.JSONTypeHelper:
@@ -247,39 +278,25 @@ class QuickbaseJsonStream(Stream):
     # def replication_key(self, value) -> None:
     #     self._replication_key = value
 
-
-
-    # def get_records(self, partition: Optional[dict] = None) -> Iterable[dict]:
-    #     """Return a generator of row-type dictionary objects.
-
-    #     Each row emitted should be a dictionary of property names to their values.
-
-    #     Args:
-    #         context: Stream partition or context dictionary.
-
-    #     Yields:
-    #         One item per (possibly processed) record in the API.
-    #     """
-    #     for record in self.request_records(context):
-    #         transformed_record = self.post_process(record, context)
-    #         if transformed_record is None:
-    #             # Record filtered out during post_process()
-    #             continue
-    #         yield transformed_record
-
-
     def request_records(self) -> Iterable[dict]:
         skip = 0
         total_records = 0
         finished = False
 
+        date_modified_id = list(filter(
+            lambda field: field['name'] == 'date_modified',
+            self.fields
+        ))[0]['id']
+
         while not finished:
             request = self.api.request_records(
                 table_id=self.table['id'],
                 field_ids=sorted([field['id'] for field in self.fields]),
+                date_modified_id=date_modified_id,
                 skip=skip,
             )
 
+            print(request.json())
             metadata = request.json()['metadata']
             total_records = metadata['totalRecords']
             skip = skip + metadata['numRecords']
@@ -297,8 +314,6 @@ class QuickbaseJsonStream(Stream):
                 if int(field_id) <= 5
             }
             yield processed
-
-
 
     def get_records(self, partition: Optional[dict] = None) -> Iterable[dict]:
         """Return a generator of row-type dictionary objects.
