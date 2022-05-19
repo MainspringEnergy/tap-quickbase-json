@@ -14,6 +14,10 @@ pipx install tap-quickbase-json
 
 ## Configuration
 
+        #TODO: Doc - What the flark!  Quickbase does not allow you to query on datetimes,
+        # only dates.  So we're not going to be able to incrementally stream data at
+        # a granularity more than daily.
+
 ### Accepted Config Options
 
 - [ ] `Developer TODO:` Provide a list of config options accepted by the tap.

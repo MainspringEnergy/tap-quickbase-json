@@ -4,18 +4,9 @@ from typing import List
 
 from singer_sdk import Tap, Stream
 from singer_sdk import typing as th  # JSON schema typing helpers
-# TODO: Import your custom stream types here:
-from tap_quickbase_json.streams import (
-    QuickbaseJsonStream,
-    LGensStream,
-)
-from tap_quickbase_json.client import QuickbaseApi
 
-# TODO: Compile a list of custom stream types here
-#       OR rewrite discover_streams() below with your custom logic.
-STREAM_TYPES = [
-    LGensStream,
-]
+from tap_quickbase_json.client import QuickbaseClient
+from tap_quickbase_json.streams import QuickbaseJsonStream
 
 
 class TapQuickbaseJson(Tap):
@@ -50,8 +41,8 @@ class TapQuickbaseJson(Tap):
 
     def discover_streams(self) -> List[Stream]:
         """Return a list of discovered streams."""
-        api = QuickbaseApi(config=self.config)
-        tables = api.get_tables()
+        client = QuickbaseClient(config=self.config)
+        tables = client.get_tables()
 
         streams = []
         for table in tables:
