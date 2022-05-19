@@ -39,6 +39,14 @@ def normalize_name(name: str) -> str:
     return name
 
 
+def raise_for_status_w_message(request: requests.Request) -> None:
+    try:
+        request.raise_for_status()
+    except requests.exceptions.HTTPError as err:
+        raise requests.exceptions.HTTPError(request.text) from err
+
+
+
 class QuickbaseApi():
     def __init__(self, config: Dict):
         self.config = config
@@ -65,10 +73,7 @@ class QuickbaseApi():
             params=params,
             headers=self.http_headers,
         )
-        try:
-            request.raise_for_status()
-        except requests.exceptions.HTTPError as err:
-            raise requests.exceptions.HTTPError(request.text) from err
+        raise_for_status_w_message(request)
         return request
 
     def get_tables(self) -> dict:
@@ -100,10 +105,7 @@ class QuickbaseApi():
             params=params,
             headers=self.http_headers
         )
-        try:
-            request.raise_for_status()
-        except requests.exceptions.HTTPError as err:
-            raise requests.exceptions.HTTPError(request.text) from err
+        raise_for_status_w_message(request)
         return request
 
     def request_records(
@@ -129,6 +131,8 @@ class QuickbaseApi():
             'from': table_id,
             'select': field_ids,
             'options': options,
+            # Quickbase weird query language - https://help.quickbase.com/api-guide/componentsquery.html
+            #   OAF - On or after
             'where': f"{{'{date_modified_id}'.OAF.'{last_date_modified}'}}",
             # Hard-coding the sortBy field to be based on the last modified date
             'sortBy': [{
@@ -137,17 +141,13 @@ class QuickbaseApi():
             }],
 
         }
-        # print(body)
-        # raise(BaseException('fin'))
+
         request = requests.post(
             'https://api.quickbase.com/v1/records/query',
             headers=self.http_headers,
             json=body
         )
-        try:
-            request.raise_for_status()
-        except requests.exceptions.HTTPError as err:
-            raise requests.exceptions.HTTPError(request.text) from err
+        raise_for_status_w_message(request)
         return request
 
 class QuickbaseJsonStream(Stream):
@@ -258,25 +258,23 @@ class QuickbaseJsonStream(Stream):
     def primary_keys(self, value: List) -> None:
         self._primary_keys = value
 
+    @property
+    def replication_key(self) -> str:
+        # parent Stream class initializes this one to None
+        if hasattr(self, '_replication_key') and self._replication_key is not None:
+            return self._replication_key
 
-    # TODO: I don't know if I need this
-    # @property
-    # def replication_key(self) -> str:
-    #     # parent Stream class initializes this one to None
-    #     if hasattr(self, '_replication_key') and self._replication_key is not None:
-    #         return self._replication_key
+        if 'date_modified' not in [field['name'] for field in self.fields]:
+            raise DateModifiedNotFoundError(
+                f'No `date_modified` field found for table {self.table["id"]}'
+            )
 
-    #     if 'date_modified' not in [field['name'] for field in self.fields]:
-    #         raise DateModifiedNotFoundError(
-    #             f'No `date_modified` field found for table {self.table["id"]}'
-    #         )
+        self._replication_key = 'date_modified'
+        return self._replication_key
 
-    #     self._replication_key = 'date_modified'
-    #     return self._replication_key
-
-    # @replication_key.setter
-    # def replication_key(self, value) -> None:
-    #     self._replication_key = value
+    @replication_key.setter
+    def replication_key(self, value) -> None:
+        self._replication_key = value
 
     def request_records(self) -> Iterable[dict]:
         skip = 0
