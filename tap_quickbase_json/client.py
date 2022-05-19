@@ -55,7 +55,7 @@ class QuickbaseApi():
             headers["User-Agent"] = self.config.get("user_agent")
         return headers
 
-    def request_tables(self) -> dict:
+    def request_tables(self) -> requests.Request:
         params = {
             'appId': self.config['qb_appid']
         }
@@ -66,10 +66,10 @@ class QuickbaseApi():
             headers=self.http_headers,
         )
         request.raise_for_status()
-        return request.json()
+        return request
 
     def get_tables(self) -> dict:
-        tables = self.request_tables()
+        tables = self.request_tables().json()
 
         return [
             {
@@ -86,7 +86,7 @@ class QuickbaseApi():
         ]
 
     @cached
-    def request_fields(self, table_id: str) -> dict:
+    def request_fields(self, table_id: str) -> requests.Request:
         params = {
             'tableId': table_id,
             'includeFieldPerms': False
@@ -98,9 +98,27 @@ class QuickbaseApi():
             headers=self.http_headers
         )
         request.raise_for_status()
-        return request.json()
+        return request
 
+    def request_records(self, table_id: str, field_ids: list, skip: int = 0):
+        options = {
+            'skip': skip
+        }
 
+        body = {
+            'from': table_id,
+            'select': field_ids,
+            'options': options,
+            # 'where': ...,
+            # 'sortBy': ...,
+
+        }
+        request = requests.post(
+            'https://api.quickbase.com/v1/records/query',
+            headers=self.http_headers,
+            json=body
+        )
+        return request
 
 class QuickbaseJsonStream(Stream):
     """quickbase-json stream class."""
@@ -125,7 +143,7 @@ class QuickbaseJsonStream(Stream):
         if hasattr(self, '_fields'):
             return self._fields
 
-        api_fields = self.api.request_fields(self.table['id'])
+        api_fields = self.api.request_fields(self.table['id']).json()
         self._fields = [
             {
                 'id': field['id'],
@@ -136,7 +154,7 @@ class QuickbaseJsonStream(Stream):
         ]
         return self._fields
 
-    def field_lookup(self) -> dict:
+    def _field_lookup(self) -> dict:
         return {
             field['id']: field['name']
             for field in self.fields
@@ -157,6 +175,10 @@ class QuickbaseJsonStream(Stream):
             'datetime': th.DateTimeType,
             'timeofday': th.TimeType,
             'recordid': th.NumberType,
+            'multitext': th.ArrayType(th.StringType),
+            'user': th.ObjectType(),
+            'multiuser': th.ArrayType(th.ObjectType()),
+            'file': th.ObjectType,
         }.get(qb_type, th.StringType)
 
     @property
@@ -227,6 +249,62 @@ class QuickbaseJsonStream(Stream):
 
 
 
+    # def get_records(self, partition: Optional[dict] = None) -> Iterable[dict]:
+    #     """Return a generator of row-type dictionary objects.
+
+    #     Each row emitted should be a dictionary of property names to their values.
+
+    #     Args:
+    #         context: Stream partition or context dictionary.
+
+    #     Yields:
+    #         One item per (possibly processed) record in the API.
+    #     """
+    #     for record in self.request_records(context):
+    #         transformed_record = self.post_process(record, context)
+    #         if transformed_record is None:
+    #             # Record filtered out during post_process()
+    #             continue
+    #         yield transformed_record
+
+
+    def request_records(self) -> Iterable[dict]:
+        skip = 0
+        total_records = 0
+        finished = False
+
+        while not finished:
+            request = self.api.request_records(
+                table_id=self.table['id'],
+                field_ids=sorted([field['id'] for field in self.fields]),
+                skip=skip,
+            )
+
+            metadata = request.json()['metadata']
+            total_records = metadata['totalRecords']
+            skip = skip + metadata['numRecords']
+
+            finished = skip >= total_records
+            yield from self.process_record_data(request.json()['data'])
+
+    def process_record_data(self, data: List) -> Iterable[dict]:
+        field_lookup = self._field_lookup()
+        for record in data:
+            processed = {
+                field_lookup[int(field_id)]: value['value']
+                for field_id, value in record.items()
+                # TODO: remove debug
+                if int(field_id) <= 5
+            }
+            yield processed
+
+
+
     def get_records(self, partition: Optional[dict] = None) -> Iterable[dict]:
-        """Return a generator of row-type dictionary objects."""
-        yield {'blerg': 'doh'}
+        """Return a generator of row-type dictionary objects.
+
+        Yields:
+            One item per (possibly processed) record in the API.
+        """
+        for record in self.request_records():
+            yield record
