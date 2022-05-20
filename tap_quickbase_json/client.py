@@ -1,4 +1,5 @@
 """Quickbase client handling."""
+import time
 import logging
 import requests
 from memoization import cached
@@ -11,6 +12,10 @@ def raise_for_status_w_message(request: requests.Request) -> None:
         request.raise_for_status()
     except requests.exceptions.HTTPError as err:
         raise requests.exceptions.HTTPError(request.text) from err
+
+def wait_for_rate_limit(request: requests.Request) -> None:
+    if int(request.headers.get("x-ratelimit-remaining", 0)) <= 1:
+        time.sleep(int(request.headers.get("x-ratelimit-reset", 0)) * 0.001)
 
 
 class QuickbaseClient():
@@ -41,6 +46,7 @@ class QuickbaseClient():
             headers=self.http_headers,
         )
         raise_for_status_w_message(request)
+        wait_for_rate_limit(request)
         return request
 
     def get_tables(self) -> dict:
@@ -53,13 +59,6 @@ class QuickbaseClient():
                 'id': table['id'],
             }
             for table in tables
-            # TODO: remove debug
-            if table['name'] in [
-                    'WO Tags',
-                    'Cost Centers',
-                    'Approvals',
-                    'Assemblies',
-            ]
         ]
 
     @cached
@@ -75,6 +74,7 @@ class QuickbaseClient():
             headers=self.http_headers
         )
         raise_for_status_w_message(request)
+        wait_for_rate_limit(request)
         return request
 
     def request_records(
@@ -90,7 +90,7 @@ class QuickbaseClient():
             'from': table_id,
             'select': field_ids,
             'options': {
-                'skip': skip
+                'skip': skip,
             },
             # Quickbase weird query language
             #   * https://help.quickbase.com/api-guide/componentsquery.html
@@ -112,4 +112,5 @@ class QuickbaseClient():
             json=body
         )
         raise_for_status_w_message(request)
+        wait_for_rate_limit(request)
         return request

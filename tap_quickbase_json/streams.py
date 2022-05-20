@@ -6,7 +6,10 @@ from singer_sdk import typing as th  # JSON Schema typing helpers
 from singer_sdk.streams import Stream
 
 from tap_quickbase_json.client import QuickbaseClient
-from tap_quickbase_json import normalize_name
+from tap_quickbase_json import (
+    normalize_name,
+    json_clean_num,
+)
 
 
 class TooManyKeyFieldsError(BaseException):
@@ -53,8 +56,6 @@ class QuickbaseJsonStream(Stream):
                 'fieldType': field['fieldType'],
             }
             for field in client_fields
-            # TODO: remove debuging
-#            if field['id'] <= 5
         ]
         return self._fields
 
@@ -79,9 +80,19 @@ class QuickbaseJsonStream(Stream):
             'timeofday': th.TimeType,
             'recordid': th.IntegerType,
             'multitext': th.ArrayType(th.StringType),
-            'user': th.ObjectType(),
-            'multiuser': th.ArrayType(th.ObjectType()),
-            'file': th.ObjectType,
+            'user': th.ObjectType(
+                th.Property('email', th.StringType()),
+                th.Property('id', th.StringType()),
+                th.Property('name', th.StringType()),
+                th.Property('userName', th.StringType()),
+            ),
+            'multiuser': th.ArrayType(th.ObjectType(
+                th.Property('email', th.StringType()),
+                th.Property('id', th.StringType()),
+                th.Property('name', th.StringType()),
+                th.Property('userName', th.StringType()),
+            )),
+            'file': th.StringType,
         }.get(qb_type, th.StringType)
 
     @property
@@ -180,10 +191,8 @@ class QuickbaseJsonStream(Stream):
         field_lookup = self._field_lookup()
         for record in data:
             processed = {
-                field_lookup[int(field_id)]: value['value']
+                field_lookup[int(field_id)]: json_clean_num(value['value'])
                 for field_id, value in record.items()
-                # TODO: remove debug
-#                if int(field_id) <= 5
             }
             yield processed
 
