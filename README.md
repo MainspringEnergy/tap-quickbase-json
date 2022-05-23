@@ -6,43 +6,26 @@ Built with the [Meltano Tap SDK](https://sdk.meltano.com) for Singer Taps.
 
 ## Installation
 
-- [ ] `Developer TODO:` Update the below as needed to correctly describe the install procedure. For instance, if you do not have a PyPi repo, or if you want users to directly install from your git repo, you can modify this step as appropriate.
+`Developer TODO:` This should be a public repo (MSE branded)
 
-```bash
-pipx install tap-quickbase-json
+```
+pipx install git+https://gitlab.com/etagen-internal/tap-quickbase-json.git
 ```
 
 ## Configuration
 
-        #TODO: Doc - What the flark!  Quickbase does not allow you to query on datetimes,
-        # only dates.  So we're not going to be able to incrementally stream data at
-        # a granularity more than daily.
+Follow [these instructions](https://www.stitchdata.com/docs/integrations/saas/quick-base) to find your Quickbase hostname, app id, and user id.  Fill the `start_date` with the earliest time you want to start syncing data.
 
-### Accepted Config Options
-
-- [ ] `Developer TODO:` Provide a list of config options accepted by the tap.
-
-A full list of supported settings and capabilities for this
-tap is available by running:
-
-```bash
-tap-quickbase-json --about
-```
-
-TODO: Is this right
-Create a configuration file
 ```
 {
- "qb_url": "https://yoursubdomain.quickbase.com/db/",
- "qb_appid": "your_appid",
- "qb_user_token": "your_user_token",
- "start_date": "1970-01-01T00:00:01Z"
+ "qb_hostname": "<yourdomain>.quickbase.com",
+ "qb_appid": "<your app id>",
+ "qb_user_token": "<your user token>",
+ "start_date": "2020-01-01"
 }
 ```
 
-### Source Authentication and Authorization
-
-- [ ] `Developer TODO:` If your tap requires special access on the source system, or any special authentication requirements, provide those here.
+**Special note:** The Quickbase API [does not permit](https://help.quickbase.com/api-guide/componentsquery.html) querying for new records based on a datetime, which is why `start_date` does not include the time.  Unfortunately, this means that every time this integration runs, it will re-fetch data for the last date that data was modified for a given table.  This will result in duplicates in the target system that will have to be deduplicated.
 
 ## Usage
 
@@ -57,8 +40,6 @@ tap-quickbase-json --config CONFIG --discover > ./catalog.json
 ```
 
 ## Developer Resources
-
-- [ ] `Developer TODO:` As a first step, scan the entire project for the text "`TODO:`" and complete any recommended steps, deleting the "TODO" references once completed.
 
 ### Initialize your Development Environment
 

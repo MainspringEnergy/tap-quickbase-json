@@ -22,7 +22,7 @@ def wait_for_rate_limit(response: requests.Response) -> None:
         time.sleep(int(response.headers.get("x-ratelimit-reset", 0)) * 0.001)
 
 
-class QuickbaseClient():
+class QuickbaseClient:
     def __init__(self, config: Mapping[str, Any], logger: Optional[logging.Logger] = None):
         self.config = config
         self.logger = logger or logging.Logger
@@ -40,12 +40,10 @@ class QuickbaseClient():
         return headers
 
     def request_tables(self) -> requests.Response:
-        params = {
-            'appId': self.config['qb_appid']
-        }
+        params = {"appId": self.config["qb_appid"]}
 
         response = requests.get(
-            'https://api.quickbase.com/v1/tables',
+            "https://api.quickbase.com/v1/tables",
             params=params,
             headers=self.http_headers,
         )
@@ -58,24 +56,21 @@ class QuickbaseClient():
 
         return [
             {
-                'name': normalize_name(table['name']),
-                'label': table['name'],
-                'id': table['id'],
+                "name": normalize_name(table["name"]),
+                "label": table["name"],
+                "id": table["id"],
             }
             for table in tables
         ]
 
     @lru_cache
     def request_fields(self, table_id: str) -> requests.Response:
-        params = {
-            'tableId': table_id,
-            'includeFieldPerms': False
-        }
+        params = {"tableId": table_id, "includeFieldPerms": False}
 
         response = requests.get(
-            'https://api.quickbase.com/v1/fields',
+            "https://api.quickbase.com/v1/fields",
             params=params,
-            headers=self.http_headers
+            headers=self.http_headers,
         )
         raise_for_status_w_message(response)
         wait_for_rate_limit(response)
@@ -86,34 +81,36 @@ class QuickbaseClient():
         table_id: str,
         field_ids: list,
         date_modified_id: int,
-        last_date_modified: str = '1970-01-01',
+        last_date_modified: str = "1970-01-01",
         skip: int = 0,
     ) -> requests.Response:
 
         body = {
-            'from': table_id,
-            'select': field_ids,
-            'options': {
-                'skip': skip,
+            "from": table_id,
+            "select": field_ids,
+            "options": {
+                "skip": skip,
             },
             # Quickbase weird query language
             #   * https://help.quickbase.com/api-guide/componentsquery.html
             #   * OAF - On or after
-            'where': f"{{'{date_modified_id}'.OAF.'{last_date_modified}'}}",
+            "where": f"{{'{date_modified_id}'.OAF.'{last_date_modified}'}}",
             # Hard-coding the sortBy field to be based on the last modified date
             #  This seems like a standard Quickbase field so it shouldn't need to be configurable
-            'sortBy': [{
-                'fieldId': date_modified_id,
-                'order': 'ASC',
-            }],
+            "sortBy": [
+                {
+                    "fieldId": date_modified_id,
+                    "order": "ASC",
+                }
+            ],
         }
 
-        self.logger.info('Sending record request to Quickbase: %s', body)
+        self.logger.info("Sending record request to Quickbase: %s", body)
 
         response = requests.post(
-            'https://api.quickbase.com/v1/records/query',
+            "https://api.quickbase.com/v1/records/query",
             headers=self.http_headers,
-            json=body
+            json=body,
         )
         raise_for_status_w_message(response)
         wait_for_rate_limit(response)

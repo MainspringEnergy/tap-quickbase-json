@@ -5,7 +5,7 @@ description = "`tap-quickbase-json` is a Singer tap for quickbase-json, built wi
 authors = ["Sterling Paramore"]
 keywords = [
     "ELT",
-    "quickbase-json",
+    "quickbase",
 ]
 license = "Apache 2.0"
 
@@ -18,11 +18,14 @@ singer-sdk = "^0.4.9"
 pytest = "^6.2.5"
 tox = "^3.24.4"
 flake8 = "^3.9.2"
-black = "^21.9b0"
+black = "^22.3"
 pydocstyle = "^6.1.1"
 mypy = "^0.910"
 types-requests = "^2.26.1"
 isort = "^5.10.1"
+
+[tool.black]
+line-length = 108
 
 [tool.isort]
 profile = "black"
