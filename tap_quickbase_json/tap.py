@@ -2,7 +2,7 @@
 
 from typing import List
 
-from singer_sdk import Tap, Stream
+from singer_sdk import Tap
 from singer_sdk import typing as th  # JSON schema typing helpers
 
 from tap_quickbase_json.client import QuickbaseClient
@@ -39,7 +39,7 @@ class TapQuickbaseJson(Tap):
         ),
     ).to_dict()
 
-    def discover_streams(self) -> List[Stream]:
+    def discover_streams(self) -> List:
         """Return a list of discovered streams."""
         client = QuickbaseClient(config=self.config)
         tables = client.get_tables()

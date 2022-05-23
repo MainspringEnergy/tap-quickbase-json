@@ -1,6 +1,6 @@
 """Stream type classes for tap-quickbase-json."""
 
-from typing import Optional, List, Iterable
+from typing import Optional, List, Dict, Iterable
 
 from singer_sdk import typing as th  # JSON Schema typing helpers
 from singer_sdk.streams import Stream
@@ -27,7 +27,7 @@ class DateModifiedNotFoundError(BaseException):
 class QuickbaseJsonStream(Stream):
     """quickbase-json stream class."""
 
-    def __init__(self, table: dict = None, **kwargs) -> None:
+    def __init__(self, table: dict, **kwargs) -> None:
         self.table = table
         super().__init__(**kwargs)
         self.logger = self._tap.logger
@@ -36,7 +36,7 @@ class QuickbaseJsonStream(Stream):
     def client(self) -> QuickbaseClient:
         if hasattr(self, '_client'):
             return self._client
-        self._client = QuickbaseClient(self.config, logger=self.logger)
+        self._client: QuickbaseClient = QuickbaseClient(self.config, logger=self.logger)
         return self._client
 
     @client.setter
@@ -44,12 +44,12 @@ class QuickbaseJsonStream(Stream):
         self._client = value
 
     @property
-    def fields(self) -> dict:
+    def fields(self) -> List[Dict]:
         if hasattr(self, '_fields'):
             return self._fields
 
-        client_fields = self.client.request_fields(self.table['id']).json()
-        self._fields = [
+        client_fields = self.client.request_fields(table_id=self.table['id']).json()
+        self._fields: List[Dict] = [
             {
                 'id': field['id'],
                 'name': normalize_name(field['label']),
@@ -66,7 +66,7 @@ class QuickbaseJsonStream(Stream):
         }
 
     @staticmethod
-    def type_lookup(qb_type: str) -> th.JSONTypeHelper:
+    def type_lookup(qb_type: str) -> object:
         return {
             'checkbox': th.BooleanType,
             'currency': th.NumberType,

@@ -1,25 +1,29 @@
 """Quickbase client handling."""
 import time
 import logging
+
+from typing import Any, List, Dict, Mapping, Optional
+
 import requests
-from memoization import cached
+from functools import lru_cache
 
 from tap_quickbase_json import normalize_name
 
 
-def raise_for_status_w_message(request: requests.Request) -> None:
+def raise_for_status_w_message(response: requests.Response) -> None:
     try:
-        request.raise_for_status()
+        response.raise_for_status()
     except requests.exceptions.HTTPError as err:
-        raise requests.exceptions.HTTPError(request.text) from err
+        raise requests.exceptions.HTTPError(response.text) from err
 
-def wait_for_rate_limit(request: requests.Request) -> None:
-    if int(request.headers.get("x-ratelimit-remaining", 0)) <= 1:
-        time.sleep(int(request.headers.get("x-ratelimit-reset", 0)) * 0.001)
+
+def wait_for_rate_limit(response: requests.Response) -> None:
+    if int(response.headers.get("x-ratelimit-remaining", 0)) <= 1:
+        time.sleep(int(response.headers.get("x-ratelimit-reset", 0)) * 0.001)
 
 
 class QuickbaseClient():
-    def __init__(self, config: dict, logger: [None, logging.Logger] = None):
+    def __init__(self, config: Mapping[str, Any], logger: Optional[logging.Logger] = None):
         self.config = config
         self.logger = logger or logging.Logger
 
@@ -35,21 +39,21 @@ class QuickbaseClient():
             headers["User-Agent"] = self.config.get("user_agent")
         return headers
 
-    def request_tables(self) -> requests.Request:
+    def request_tables(self) -> requests.Response:
         params = {
             'appId': self.config['qb_appid']
         }
 
-        request = requests.get(
+        response = requests.get(
             'https://api.quickbase.com/v1/tables',
             params=params,
             headers=self.http_headers,
         )
-        raise_for_status_w_message(request)
-        wait_for_rate_limit(request)
-        return request
+        raise_for_status_w_message(response)
+        wait_for_rate_limit(response)
+        return response
 
-    def get_tables(self) -> dict:
+    def get_tables(self) -> List[Dict]:
         tables = self.request_tables().json()
 
         return [
@@ -61,21 +65,21 @@ class QuickbaseClient():
             for table in tables
         ]
 
-    @cached
-    def request_fields(self, table_id: str) -> requests.Request:
+    @lru_cache
+    def request_fields(self, table_id: str) -> requests.Response:
         params = {
             'tableId': table_id,
             'includeFieldPerms': False
         }
 
-        request = requests.get(
+        response = requests.get(
             'https://api.quickbase.com/v1/fields',
             params=params,
             headers=self.http_headers
         )
-        raise_for_status_w_message(request)
-        wait_for_rate_limit(request)
-        return request
+        raise_for_status_w_message(response)
+        wait_for_rate_limit(response)
+        return response
 
     def request_records(
         self,
@@ -84,7 +88,7 @@ class QuickbaseClient():
         date_modified_id: int,
         last_date_modified: str = '1970-01-01',
         skip: int = 0,
-    ) -> requests.Request:
+    ) -> requests.Response:
 
         body = {
             'from': table_id,
@@ -106,11 +110,11 @@ class QuickbaseClient():
 
         self.logger.info('Sending record request to Quickbase: %s', body)
 
-        request = requests.post(
+        response = requests.post(
             'https://api.quickbase.com/v1/records/query',
             headers=self.http_headers,
             json=body
         )
-        raise_for_status_w_message(request)
-        wait_for_rate_limit(request)
-        return request
+        raise_for_status_w_message(response)
+        wait_for_rate_limit(response)
+        return response
