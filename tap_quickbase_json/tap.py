@@ -1,4 +1,5 @@
 """quickbase-json tap class."""
+import sys
 
 from typing import List
 
@@ -39,6 +40,10 @@ class TapQuickbaseJson(Tap):
         """Return a list of discovered streams."""
         client = QuickbaseClient(config=self.config)
         tables = client.get_tables()
+
+        # Speed up integration tests
+        if "pytest" in sys.modules:
+            tables = tables[0:1]
 
         streams = []
         for table in tables:

@@ -2,7 +2,7 @@
 name = "atomicwrites"
 version = "1.4.0"
 description = "Atomic file writes."
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
 
@@ -752,7 +752,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytest-
 [metadata]
 lock-version = "1.1"
 python-versions = "<3.11,>=3.7.1"
-content-hash = "f655c2d140fb7fcfd04a7334dc4068224edda4179acd2d473a9a28c39fc04716"
+content-hash = "a19ddf4eca5e5a818a3fa0d2aec0aeb07737a49ab5fb8b110714de8fa838bb92"
 
 [metadata.files]
 atomicwrites = [
