@@ -1,0 +1,41 @@
+version: 1
+send_anonymous_usage_stats: true
+project_id: tap-quickbase-json
+plugins:
+  extractors:
+  - name: tap-quickbase-json
+    namespace: tap_quickbase_json
+    pip_url: -e .
+    capabilities:
+    - state
+    - catalog
+    - discover
+    settings:
+    - name: qb_hostname
+    - name: qb_appid
+    - name: qb_user_token
+      kind: password
+    - name: start_date
+      kind: date_iso8601
+    config:
+      start_date: '2010-01-01T00:00:00Z'
+  loaders:
+  - name: target-jsonl
+    variant: andyh1203
+    pip_url: target-jsonl
+environments:
+- name: dev
+  config:
+    plugins:
+      extractors:
+      - name: tap-quickbase-json
+        config:
+          qb_hostname: YOURDOMAIN.quickbase.com
+          qb_appid: YOURID
+          start_date: '2000-01-01T00:00:01Z'
+      loaders:
+      - name: target-jsonl
+        config:
+          destination_path: jsonl_files
+- name: staging
+- name: prod
