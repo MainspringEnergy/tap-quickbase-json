@@ -1,6 +1,5 @@
 """quickbase-json tap class."""
 import sys
-
 from typing import List
 
 from singer_sdk import Tap

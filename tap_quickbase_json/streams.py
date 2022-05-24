@@ -1,15 +1,12 @@
 """Stream type classes for tap-quickbase-json."""
 
-from typing import Optional, List, Dict, Iterable
+from typing import Dict, Iterable, List, Optional
 
 from singer_sdk import typing as th  # JSON Schema typing helpers
 from singer_sdk.streams import Stream
 
+from tap_quickbase_json import json_clean_num, normalize_name
 from tap_quickbase_json.client import QuickbaseClient
-from tap_quickbase_json import (
-    normalize_name,
-    json_clean_num,
-)
 
 
 class TooManyKeyFieldsError(BaseException):
@@ -189,7 +186,7 @@ class QuickbaseJsonStream(Stream):
                 table_id=self.table["id"],
                 field_ids=sorted([field["id"] for field in self.fields]),
                 date_modified_id=date_modified_id,
-                last_date_modified=self.get_starting_replication_key_value(context),
+                last_date_modified=str(self.get_starting_replication_key_value(context)),
                 skip=skip,
             )
 

@@ -1,8 +1,7 @@
 """tap_quickbase_json shared methods."""
 
-import re
 import math
-
+import re
 from typing import Any
 
 

@@ -1,11 +1,10 @@
 """Quickbase client handling."""
-import time
 import logging
-
-from typing import Any, List, Dict, Mapping, Optional
+import time
+from functools import lru_cache
+from typing import Any, Dict, List, Mapping, Optional
 
 import requests
-from functools import lru_cache
 
 from tap_quickbase_json import normalize_name
 
@@ -36,7 +35,7 @@ class QuickbaseClient:
 
         """
         self.config = config
-        self.logger = logger or logging.Logger
+        self.logger = logger or logging.getLogger()
 
     @property
     def http_headers(self) -> dict:
