@@ -1,3 +1,5 @@
+"""tap_quickbase_json shared methods."""
+
 import re
 import math
 
@@ -5,6 +7,7 @@ from typing import Any
 
 
 def normalize_name(name: str) -> str:
+    """Returns a normalized name that should be compatible with most databases."""
     # Standardize on lowercase
     name = name.lower()
 
@@ -38,6 +41,7 @@ def _isnan(val: Any) -> bool:
 
 
 def json_clean_num(val: Any) -> Any:
+    """Cleans up JSON numeric data that isn't actual standard JSON."""
     if val in [float("inf"), float("-inf")] or _isnan(val):
         return None
     return val

@@ -13,27 +13,37 @@ from tap_quickbase_json import (
 
 
 class TooManyKeyFieldsError(BaseException):
-    pass
+    """Raised when there are multiple key fields found."""
 
 
 class NoKeyFieldError(BaseException):
-    pass
+    """Raised when there are no key fields found."""
 
 
 class DateModifiedNotFoundError(BaseException):
-    pass
+    """Raised when there is no date modified field."""
 
 
 class QuickbaseJsonStream(Stream):
     """quickbase-json stream class."""
 
     def __init__(self, table: dict, **kwargs) -> None:
+        """Init Quickbase tap stream.
+
+        Args:
+            tap: Singer Tap this stream belongs to.
+            schema: JSON schema for records in this stream.
+            name: Name of this stream.
+            table: Dictionary of Quickbase table properties (id, name)
+
+        """
         self.table = table
         super().__init__(**kwargs)
         self.logger = self._tap.logger
 
     @property
     def client(self) -> QuickbaseClient:
+        """Quickbase API client."""
         if hasattr(self, "_client"):
             return self._client
         self._client: QuickbaseClient = QuickbaseClient(self.config, logger=self.logger)
@@ -45,6 +55,7 @@ class QuickbaseJsonStream(Stream):
 
     @property
     def fields(self) -> List[Dict]:
+        """Quickbase fields for this stream's table."""
         if hasattr(self, "_fields"):
             return self._fields
 
@@ -63,7 +74,7 @@ class QuickbaseJsonStream(Stream):
         return {field["id"]: field["name"] for field in self.fields}
 
     @staticmethod
-    def type_lookup(qb_type: str) -> object:
+    def _type_lookup(qb_type: str) -> object:
         return {
             "checkbox": th.BooleanType,
             "currency": th.NumberType,
@@ -96,12 +107,18 @@ class QuickbaseJsonStream(Stream):
 
     @property
     def schema(self) -> dict:
+        """Get schema.
+
+        Returns:
+            JSON Schema dictionary for this stream.
+
+        """
         if hasattr(self, "_schema"):
             return self._schema
 
         schema_builder = th.PropertiesList()
         for field in self.fields:
-            schema_builder.append(th.Property(field["name"], self.type_lookup(field["fieldType"])))
+            schema_builder.append(th.Property(field["name"], self._type_lookup(field["fieldType"])))
         self._schema = schema_builder.to_dict()
         return self._schema
 
@@ -111,6 +128,12 @@ class QuickbaseJsonStream(Stream):
 
     @property
     def primary_keys(self) -> List:
+        """Get primary keys.
+
+        Returns:
+            List of primary keys
+
+        """
         # parent Stream class initializes this one to None
         if hasattr(self, "_primary_keys") and self._primary_keys is not None:
             return self._primary_keys
@@ -131,6 +154,12 @@ class QuickbaseJsonStream(Stream):
 
     @property
     def replication_key(self) -> str:
+        """Get replication key.
+
+        Returns:
+            Name of replication key
+
+        """
         # parent Stream class initializes this one to None
         if hasattr(self, "_replication_key") and self._replication_key is not None:
             return self._replication_key
@@ -145,7 +174,7 @@ class QuickbaseJsonStream(Stream):
     def replication_key(self, value) -> None:
         self._replication_key = value
 
-    def request_records(self, context: Optional[dict]) -> Iterable[dict]:
+    def _request_records(self, context: Optional[dict]) -> Iterable[dict]:
         skip = 0
         total_records = 0
         finished = False
@@ -170,9 +199,9 @@ class QuickbaseJsonStream(Stream):
             self.logger.info("Retrieved %s/%s records", skip, total_records)
 
             finished = skip >= total_records
-            yield from self.process_record_data(request.json()["data"])
+            yield from self._process_record_data(request.json()["data"])
 
-    def process_record_data(self, data: List) -> Iterable[dict]:
+    def _process_record_data(self, data: List) -> Iterable[dict]:
         field_lookup = self._field_lookup()
         for record in data:
             processed = {
@@ -187,5 +216,5 @@ class QuickbaseJsonStream(Stream):
         Yields:
             One item per (possibly processed) record in the API.
         """
-        for record in self.request_records(context):
+        for record in self._request_records(context):
             yield record

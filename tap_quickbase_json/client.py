@@ -11,6 +11,7 @@ from tap_quickbase_json import normalize_name
 
 
 def raise_for_status_w_message(response: requests.Response) -> None:
+    """Raises on bad requests and prints error messages."""
     try:
         response.raise_for_status()
     except requests.exceptions.HTTPError as err:
@@ -18,12 +19,22 @@ def raise_for_status_w_message(response: requests.Response) -> None:
 
 
 def wait_for_rate_limit(response: requests.Response) -> None:
+    """Waits some time if rate limiting is applied."""
     if int(response.headers.get("x-ratelimit-remaining", 0)) <= 1:
         time.sleep(int(response.headers.get("x-ratelimit-reset", 0)) * 0.001)
 
 
 class QuickbaseClient:
+    """QuickbaseClient class for interface with the API."""
+
     def __init__(self, config: Mapping[str, Any], logger: Optional[logging.Logger] = None):
+        """Init Quickbase client.
+
+        Args:
+            config: Tap configuration parameters.
+            logger: logger to be used for printing useful info.
+
+        """
         self.config = config
         self.logger = logger or logging.Logger
 
@@ -40,6 +51,7 @@ class QuickbaseClient:
         return headers
 
     def request_tables(self) -> requests.Response:
+        """Returns a response object containing results of a GET tables request."""
         params = {"appId": self.config["qb_appid"]}
 
         response = requests.get(
@@ -52,6 +64,7 @@ class QuickbaseClient:
         return response
 
     def get_tables(self) -> List[Dict]:
+        """Gets a list of tables available to the API."""
         tables = self.request_tables().json()
 
         return [
@@ -65,6 +78,7 @@ class QuickbaseClient:
 
     @lru_cache
     def request_fields(self, table_id: str) -> requests.Response:
+        """Returns a response object containing all fields for a given table id."""
         params = {"tableId": table_id, "includeFieldPerms": False}
 
         response = requests.get(
@@ -84,7 +98,16 @@ class QuickbaseClient:
         last_date_modified: str = "1970-01-01",
         skip: int = 0,
     ) -> requests.Response:
+        """Request records for a table.
 
+        Args:
+            table_id: Id of the table.
+            field_ids: List of field ids.
+            date_modified_id: Field id of the date modified field.
+            last_date_modified: Only returns records modified on or after this date (YYYY-MM-DD).
+            skip: Number of records to skip initially.
+
+        """
         body = {
             "from": table_id,
             "select": field_ids,
