@@ -39,7 +39,7 @@ def _isnan(val: Any) -> bool:
         return False
 
 
-def json_clean_num(val: Any) -> Any:
+def json_clean_naninf(val: Any) -> Any:
     """Cleans up JSON numeric data that isn't actual standard JSON."""
     if val in [float("inf"), float("-inf")] or _isnan(val):
         return None

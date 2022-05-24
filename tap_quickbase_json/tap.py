@@ -1,5 +1,4 @@
 """quickbase-json tap class."""
-import sys
 from typing import List
 
 from singer_sdk import Tap
@@ -33,19 +32,24 @@ class TapQuickbaseJson(Tap):
             th.DateTimeType,
             description="The earliest record date to sync",
         ),
+        th.Property(
+            "table_catalog",
+            th.ArrayType(th.StringType),
+            description="Limit catalog scanning to the specified tables (default is all tables)",
+            default=[],
+        ),
     ).to_dict()
 
     def discover_streams(self) -> List:
         """Return a list of discovered streams."""
         client = QuickbaseClient(config=self.config)
-        tables = client.get_tables()
-
-        # Speed up integration tests
-        if "pytest" in sys.modules:
-            tables = tables[0:1]
+        all_tables = client.get_tables()
+        table_catalog = self.config["table_catalog"]
 
         streams = []
-        for table in tables:
+        for table in all_tables:
+            if table["name"] not in table_catalog and len(table_catalog) > 0:
+                continue
             stream = QuickbaseJsonStream(
                 tap=self,
                 name=table["name"],

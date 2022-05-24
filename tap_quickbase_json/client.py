@@ -14,12 +14,18 @@ def raise_for_status_w_message(response: requests.Response) -> None:
     try:
         response.raise_for_status()
     except requests.exceptions.HTTPError as err:
-        raise requests.exceptions.HTTPError(response.text) from err
+        msg = response.text
+        if "quota" in response.text.lower():
+            msg += (
+                ' x-ratelimit-remaining: {response.headers.get("x-ratelimit-remaining", None)},'
+                ' x-ratelimit-reset: {response.headers.get("x-ratelimit-reset", None)}'
+            )
+        raise requests.exceptions.HTTPError(msg) from err
 
 
 def wait_for_rate_limit(response: requests.Response) -> None:
     """Waits some time if rate limiting is applied."""
-    if int(response.headers.get("x-ratelimit-remaining", 0)) <= 1:
+    if int(response.headers.get("x-ratelimit-remaining", 0)) <= 2:
         time.sleep(int(response.headers.get("x-ratelimit-reset", 0)) * 0.001)
 
 

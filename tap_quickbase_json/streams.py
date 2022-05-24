@@ -1,11 +1,11 @@
 """Stream type classes for tap-quickbase-json."""
 
-from typing import Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from singer_sdk import typing as th  # JSON Schema typing helpers
 from singer_sdk.streams import Stream
 
-from tap_quickbase_json import json_clean_num, normalize_name
+from tap_quickbase_json import json_clean_naninf, normalize_name
 from tap_quickbase_json.client import QuickbaseClient
 
 
@@ -69,6 +69,9 @@ class QuickbaseJsonStream(Stream):
 
     def _field_lookup(self) -> dict:
         return {field["id"]: field["name"] for field in self.fields}
+
+    def _field_type_lookup(self) -> dict:
+        return {field["id"]: field["fieldType"] for field in self.fields}
 
     @staticmethod
     def _type_lookup(qb_type: str) -> object:
@@ -198,11 +201,21 @@ class QuickbaseJsonStream(Stream):
             finished = skip >= total_records
             yield from self._process_record_data(request.json()["data"])
 
+    @staticmethod
+    def _json_clean_values(value: Any, field_type: str) -> Any:
+        value = json_clean_naninf(value)
+        if field_type in ["date", "datetime", "timestamp"] and len(value) == 0:
+            value = None
+        return value
+
     def _process_record_data(self, data: List) -> Iterable[dict]:
         field_lookup = self._field_lookup()
+        field_type_lookup = self._field_type_lookup()
         for record in data:
             processed = {
-                field_lookup[int(field_id)]: json_clean_num(value["value"])
+                field_lookup[int(field_id)]: self._json_clean_values(
+                    value["value"], field_type_lookup[int(field_id)]
+                )
                 for field_id, value in record.items()
             }
             yield processed
