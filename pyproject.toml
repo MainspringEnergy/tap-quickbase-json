@@ -24,6 +24,7 @@ pydocstyle = "^6.1.1"
 mypy = "^0.910"
 types-requests = "^2.26.1"
 isort = "^5.10.1"
+requests-mock = "^1.9.3"
 
 [tool.black]
 line-length = 108
