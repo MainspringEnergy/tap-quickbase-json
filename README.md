@@ -21,12 +21,10 @@ Follow [these instructions](https://www.stitchdata.com/docs/integrations/saas/qu
  "qb_hostname": "<yourdomain>.quickbase.com",
  "qb_appid": "<your app id>",
  "qb_user_token": "<your user token>",
- "start_date": "2020-01-01",
+ "start_date": "2020-01-01 00:00:00",
  "table_catalog": [],
 }
 ```
-
-**Special note:** The Quickbase API [does not permit](https://help.quickbase.com/api-guide/componentsquery.html) querying for new records based on a datetime, which is why `start_date` does not include the time.  Unfortunately, this means that every time this integration runs, it will re-fetch data for the last date that data was modified for a given table.  This will result in duplicates in the target system that will have to be deduplicated.
 
 ## Usage
 

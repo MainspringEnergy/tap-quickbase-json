@@ -24,6 +24,9 @@ class DateModifiedNotFoundError(BaseException):
 class QuickbaseJsonStream(Stream):
     """quickbase-json stream class."""
 
+    is_sorted = True
+    STATE_MSG_FREQUENCY = 2000
+
     def __init__(self, table: dict, **kwargs) -> None:
         """Init Quickbase tap stream.
 
@@ -183,22 +186,24 @@ class QuickbaseJsonStream(Stream):
             "id"
         ]
 
-        self.logger.info("Fetching data for table %s (%s)", self.table["id"], self.table["name"])
+        self.logger.info("Fetching data for table %s (%s)", self.table["name"], self.table["id"])
         while not finished:
             request = self.client.request_records(
                 table_id=self.table["id"],
+                table_name=self.table["name"],
                 field_ids=sorted([field["id"] for field in self.fields]),
                 date_modified_id=date_modified_id,
-                last_date_modified=str(self.get_starting_replication_key_value(context)),
+                last_date_modified=self.get_starting_replication_key_value(context),
                 skip=skip,
             )
 
             metadata = request.json()["metadata"]
             total_records = metadata["totalRecords"]
             skip = skip + metadata["numRecords"]
-            self.logger.info("Retrieved %s/%s records", skip, total_records)
+            self.logger.info("%s: Retrieved %s/%s records", self.table["name"], skip, total_records)
 
             finished = skip >= total_records
+
             yield from self._process_record_data(request.json()["data"])
 
     @staticmethod

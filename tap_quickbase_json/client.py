@@ -4,6 +4,7 @@ import time
 from functools import lru_cache
 from typing import Any, Dict, List, Mapping, Optional
 
+import dateutil
 import requests
 
 from tap_quickbase_json import normalize_name
@@ -98,21 +99,30 @@ class QuickbaseClient:
     def request_records(
         self,
         table_id: str,
+        table_name: str,
         field_ids: list,
         date_modified_id: int,
-        last_date_modified: str = "1970-01-01",
+        last_date_modified: Optional[str],
         skip: int = 0,
     ) -> requests.Response:
         """Request records for a table.
 
         Args:
             table_id: Id of the table.
+            table_name: Name of table (for logging)
             field_ids: List of field ids.
             date_modified_id: Field id of the date modified field.
-            last_date_modified: Only returns records modified on or after this date (YYYY-MM-DD).
+            last_date_modified: Only returns records modified on or after this datetime
             skip: Number of records to skip initially.
 
         """
+        last_date_modified = last_date_modified or "1970-01-01T00:00:00Z"
+
+        last_modified_epoch = int(dateutil.parser.parse(last_date_modified).timestamp() * 1000)
+        self.logger.info(
+            "Converting last date modified to epoch: %s -> %i", last_date_modified, last_modified_epoch
+        )
+
         body = {
             "from": table_id,
             "select": field_ids,
@@ -122,7 +132,7 @@ class QuickbaseClient:
             # Quickbase weird query language
             #   * https://help.quickbase.com/api-guide/componentsquery.html
             #   * OAF - On or after
-            "where": f"{{'{date_modified_id}'.OAF.'{last_date_modified}'}}",
+            "where": f"{{'{date_modified_id}'.OAF.'{last_modified_epoch}'}}",
             # Hard-coding the sortBy field to be based on the last modified date
             #  This seems like a standard Quickbase field so it shouldn't need to be configurable
             "sortBy": [
@@ -133,7 +143,14 @@ class QuickbaseClient:
             ],
         }
 
-        self.logger.info("Sending record request to Quickbase: %s", body)
+        self.logger.info(
+            "Sending record request for table %s... from: %s, options: %s, where: %s, sortBy: %s",
+            table_name,
+            body["from"],
+            body["options"],
+            body["where"],
+            body["sortBy"],
+        )
 
         response = requests.post(
             "https://api.quickbase.com/v1/records/query",
