@@ -13,6 +13,11 @@ SAMPLE_CONFIG = {
     "table_catalog": ["my_table", "my_other_table"],
 }
 
+META_TABLES = {
+    "qb_meta_tables",
+    "qb_meta_fields",
+}
+
 
 def mock_tables_response_json(include=None):
     include = include or ["t1", "t2", "t3"]
@@ -121,7 +126,7 @@ def test_table_catalog_restricted(requests_mock):
     mock_all_requests(requests_mock)
 
     tap = TapQuickbaseJson(config=SAMPLE_CONFIG)
-    assert set(tap.streams.keys()) == {"my_table", "my_other_table"}
+    assert set(tap.streams.keys()) == {"my_table", "my_other_table"} | META_TABLES
 
 
 def test_table_catalog_not_restricted(requests_mock):
@@ -129,7 +134,7 @@ def test_table_catalog_not_restricted(requests_mock):
     mock_all_requests(requests_mock)
 
     tap = TapQuickbaseJson(config={**SAMPLE_CONFIG, **{"table_catalog": []}})
-    assert set(tap.streams.keys()) == {"my_table", "my_other_table", "my_excluded_table"}
+    assert set(tap.streams.keys()) == {"my_table", "my_other_table", "my_excluded_table"} | META_TABLES
 
 
 def test_empty_timestamps(requests_mock):
