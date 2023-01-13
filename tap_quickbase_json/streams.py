@@ -1,5 +1,6 @@
 """Stream type classes for tap-quickbase-json."""
 
+import datetime
 from typing import Any, Dict, Iterable, List, Optional
 
 from singer_sdk import typing as th  # JSON Schema typing helpers
@@ -21,8 +22,170 @@ class DateModifiedNotFoundError(BaseException):
     """Raised when there is no date modified field."""
 
 
+class QuickbaseMetaTableStream(Stream):
+    """quickbase-json table metadata stream class."""
+
+    primary_keys: List = ["app_id", "table_id"]
+    replication_method: str = "FULL_TABLE"
+
+    def __init__(self, **kwargs) -> None:
+        """Quickbase tables metadata stream.
+
+        Args:
+            tap: Singer Tap this stream belongs to.
+            schema: JSON schema for records in this stream.
+            name: Name of this stream.
+        """
+        super().__init__(**kwargs)
+        self.logger = self._tap.logger
+
+    @property
+    def client(self) -> QuickbaseClient:
+        """Quickbase API client."""
+        if hasattr(self, "_client"):
+            return self._client
+        self._client: QuickbaseClient = QuickbaseClient(self.config, logger=self.logger)
+        return self._client
+
+    @client.setter
+    def client(self, value) -> None:
+        self._client = value
+
+    @property
+    def schema(self) -> dict:
+        """Get schema.
+
+        Returns:
+            JSON Schema dictionary for this stream.
+
+        """
+        if hasattr(self, "_schema"):
+            return self._schema
+
+        schema_builder = th.PropertiesList()
+        schema_builder.append(th.Property("app_id", th.StringType()))
+        schema_builder.append(th.Property("query_at", th.DateTimeType()))
+        schema_builder.append(th.Property("table_id", th.StringType()))
+        schema_builder.append(th.Property("table_name", th.StringType()))
+        schema_builder.append(th.Property("metadata", th.ArrayType(th.ObjectType())))
+        self._schema = schema_builder.to_dict()
+        return self._schema
+
+    @schema.setter
+    def schema(self, value) -> None:
+        self._schema = value
+
+    def get_records(self, context: Optional[dict]) -> Iterable[dict]:
+        """Return a generator of row-type dictionary objects.
+
+        Yields:
+            One item per (possibly processed) record in the API.
+        """
+        query_at = datetime.datetime.now()
+        tables = self.client.request_tables().json()
+
+        for table in tables:
+            table_name = normalize_name(table["name"])
+            record = {
+                "app_id": self.config["qb_appid"],
+                "query_at": query_at,
+                "table_id": table["id"],
+                "table_name": table_name,
+                "metadata": table,
+            }
+            yield record
+
+
+class QuickbaseMetaFieldStream(Stream):
+    """quickbase-json field metadata stream class."""
+
+    primary_keys = ["app_id", "table_id", "field_id"]
+    replication_method: str = "FULL_TABLE"
+
+    def __init__(self, table_catalog: List[str] = None, **kwargs) -> None:
+        """Quickbase field metadata stream.
+
+        Args:
+            tap: Singer Tap this stream belongs to.
+            schema: JSON schema for records in this stream.
+            name: Name of this stream.
+            table_catalog: Only includes fields from tables in the catalog.
+        """
+        super().__init__(**kwargs)
+        self.logger = self._tap.logger
+        self.table_catalog = table_catalog or []
+
+    @property
+    def client(self) -> QuickbaseClient:
+        """Quickbase API client."""
+        if hasattr(self, "_client"):
+            return self._client
+        self._client: QuickbaseClient = QuickbaseClient(self.config, logger=self.logger)
+        return self._client
+
+    @client.setter
+    def client(self, value) -> None:
+        self._client = value
+
+    @property
+    def schema(self) -> dict:
+        """Get schema.
+
+        Returns:
+            JSON Schema dictionary for this stream.
+
+        """
+        if hasattr(self, "_schema"):
+            return self._schema
+
+        schema_builder = th.PropertiesList()
+        schema_builder.append(th.Property("app_id", th.StringType()))
+        schema_builder.append(th.Property("query_at", th.DateTimeType()))
+        schema_builder.append(th.Property("table_id", th.StringType()))
+        schema_builder.append(th.Property("table_name", th.StringType()))
+        schema_builder.append(th.Property("field_id", th.StringType()))
+        schema_builder.append(th.Property("field_name", th.StringType()))
+        schema_builder.append(th.Property("metadata", th.ArrayType(th.ObjectType())))
+        self._schema = schema_builder.to_dict()
+        return self._schema
+
+    @schema.setter
+    def schema(self, value) -> None:
+        self._schema = value
+
+    def get_records(self, context: Optional[dict]) -> Iterable[dict]:
+        """Return a generator of row-type dictionary objects.
+
+        Yields:
+            One item per (possibly processed) record in the API.
+        """
+        query_at = datetime.datetime.now()
+        tables = self.client.request_tables().json()
+        for table in tables:
+            table_name = normalize_name(table["name"])
+
+            if table_name not in self.table_catalog and len(self.table_catalog) > 0:
+                continue
+
+            self.logger.info("Fetching field metadata for table %s (%s)", table_name, table["id"])
+
+            fields = self.client.request_fields(table_id=table["id"]).json()
+
+            for field in fields:
+                record = {
+                    "app_id": self.config["qb_appid"],
+                    "query_at": query_at,
+                    "table_id": table["id"],
+                    "table_name": table_name,
+                    "field_id": field["id"],
+                    "field_name": normalize_name(field["label"]),
+                    "metadata": field,
+                }
+                yield record
+
+
 class QuickbaseJsonStream(Stream):
-    """quickbase-json stream class."""
+    """quickbase-json record stream class."""
 
     is_sorted = True
     STATE_MSG_FREQUENCY = 2000

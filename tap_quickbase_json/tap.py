@@ -5,7 +5,11 @@ from singer_sdk import Tap
 from singer_sdk import typing as th  # JSON schema typing helpers
 
 from tap_quickbase_json.client import QuickbaseClient
-from tap_quickbase_json.streams import QuickbaseJsonStream
+from tap_quickbase_json.streams import (
+    QuickbaseJsonStream,
+    QuickbaseMetaFieldStream,
+    QuickbaseMetaTableStream,
+)
 
 
 class TapQuickbaseJson(Tap):
@@ -46,7 +50,10 @@ class TapQuickbaseJson(Tap):
         all_tables = client.get_tables()
         table_catalog = self.config["table_catalog"]
 
-        streams = []
+        streams = [
+            QuickbaseMetaTableStream(tap=self, name="qb_meta_tables"),
+            QuickbaseMetaFieldStream(tap=self, name="qb_meta_fields", table_catalog=table_catalog),
+        ]
         for table in all_tables:
             if table["name"] not in table_catalog and len(table_catalog) > 0:
                 continue
