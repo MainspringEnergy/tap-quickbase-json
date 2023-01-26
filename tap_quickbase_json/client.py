@@ -85,7 +85,7 @@ class QuickbaseClient:
     @lru_cache
     def request_fields(self, table_id: str) -> requests.Response:
         """Returns a response object containing all fields for a given table id."""
-        params = {"tableId": table_id, "includeFieldPerms": False}
+        params = {"tableId": table_id, "includeFieldPerms": 'false'}
 
         response = requests.get(
             "https://api.quickbase.com/v1/fields",

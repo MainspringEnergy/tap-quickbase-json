@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tap-quickbase-json"
-version = "0.3.0"
+version = "0.3.1"
 description = "`tap-quickbase-json` is a Singer tap for quickbase-json, built with the Meltano SDK for Singer Taps."
 authors = ["Sterling Paramore"]
 keywords = [
