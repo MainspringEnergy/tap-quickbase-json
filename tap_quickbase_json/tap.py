@@ -40,7 +40,7 @@ class TapQuickbaseJson(Tap):
             "table_catalog",
             th.ArrayType(th.StringType),
             description="Limit catalog scanning to the specified tables (default is all tables)",
-            default=[],
+            default=[],  # type: ignore
         ),
     ).to_dict()
 

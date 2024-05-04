@@ -21,7 +21,7 @@ def raise_for_status_w_message(response: requests.Response) -> None:
                 ' x-ratelimit-remaining: {response.headers.get("x-ratelimit-remaining", None)},'
                 ' x-ratelimit-reset: {response.headers.get("x-ratelimit-reset", None)}'
             )
-        raise requests.exceptions.HTTPError(msg) from err
+        raise requests.exceptions.HTTPError(msg, response=response) from err
 
 
 def wait_for_rate_limit(response: requests.Response) -> None:
@@ -85,7 +85,7 @@ class QuickbaseClient:
     @lru_cache
     def request_fields(self, table_id: str) -> requests.Response:
         """Returns a response object containing all fields for a given table id."""
-        params = {"tableId": table_id, "includeFieldPerms": 'false'}
+        params = {"tableId": table_id, "includeFieldPerms": "false"}
 
         response = requests.get(
             "https://api.quickbase.com/v1/fields",
